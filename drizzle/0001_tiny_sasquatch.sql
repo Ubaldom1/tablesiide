@@ -1,0 +1,1 @@
+ALTER TABLE `interests` ADD `finishes` text;

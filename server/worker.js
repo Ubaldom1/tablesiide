@@ -19,6 +19,25 @@ export default {
     const finishes=data.finishes??[];
     if(!Array.isArray(finishes)||finishes.length>4||finishes.some(f=>!['Matte Black','Gloss Black','White','Polished Nickel'].includes(f))) return json({error:'Please select a listed finish.'},400);
     await env.DB.prepare('INSERT INTO interests (id,email,name,restaurant,city,quantity,price_usd,created_at,finishes) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(email) DO NOTHING').bind(crypto.randomUUID(),email,name,restaurant,city,quantity,price,new Date().toISOString(),JSON.stringify([...new Set(finishes)])).run();
+    if(env.RESEND_API_KEY) {
+     try {
+     const notification=await fetch('https://api.resend.com/emails',{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json'},
+      body:JSON.stringify({
+       from:'Tablesiide <support@tablesiide.com>',
+       to:['support@tablesiide.com'],
+       reply_to:email,
+       subject:'New Tablesiide restaurant inquiry',
+       text:[`Name: ${name}`,`Email: ${email}`,`Restaurant: ${restaurant}`,`City: ${city}`,`Quantity: ${quantity??'Not provided'}`,`Suggested price (USD): ${price??'Not provided'}`,`Finishes: ${[...new Set(finishes)].join(', ')||'Not provided'}`].join('\n')
+      })
+     });
+     if(!notification.ok) throw Error(`Mail provider returned ${notification.status}`);
+     } catch(error) {
+      console.error('Inquiry notification failed',error);
+      return json({error:'Your interest was saved, but we could not notify the team. Please try again shortly.'},503);
+     }
+    }
     return json({ok:true});
    } catch {return json({error:'We could not save your interest. Please try again shortly.'},500);}
   }
